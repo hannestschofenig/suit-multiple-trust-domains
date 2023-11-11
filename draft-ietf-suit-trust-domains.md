@@ -1,7 +1,7 @@
 ---
-title: SUIT Manifest Extensions for Multiple Trust Domains
-abbrev: SUIT Trust Domains
-docname: draft-ietf-suit-trust-domains-02
+title: SUIT Manifest Extensions for Handling Dependencies
+abbrev: SUIT Dependencies
+docname: draft-ietf-suit-trust-domains-03
 category: std
 
 ipr: trust200902
@@ -37,88 +37,49 @@ author:
       email: ken.takayama.ietf@gmail.com
 
 normative:
-  RFC3986:
   RFC7228:
-  RFC8392:
-  RFC8747:
-  RFC9019:
-  RFC9124:
   I-D.ietf-suit-manifest:
 
 informative:
+  RFC9019:
+  RFC9124:
   I-D.ietf-suit-update-management:
   I-D.ietf-suit-firmware-encryption:
-  I-D.ietf-teep-architecture:
+  RFC9397:
 
 --- abstract
 
-This specification describes extensions to the SUIT Manifest format (as
-defined in {{I-D.ietf-suit-manifest}}) for use in deployments with
-multiple trust domains. A device has more than one trust domain when it
-enables delegation of different rights to mutually distrusting entities
-for use for different purposes or Components in the context of firmware
-or software update.
+This specification describes extensions to the SUIT Manifest format for
+handling dependencies. These dependency extension allows one Manifest
+to express a dependency on another Manifest.
 
 --- middle
 
 #  Introduction
 
-Devices that go beyond single-signer update require more complex rules for deploying software updates. For example, devices may require:
+The SUIT Manifest specification {{I-D.ietf-suit-manifest}} defines the basic
+functionality for protecting firmware images, software components and configuration
+data.
 
-* long-term Trust Anchors with a mechanism to delegate trust to short term keys.
-* software Components from multiple software signing authorities.
-* a mechanism to remove an unneeded Component
-* single-object Dependencies
-* a partly encrypted Manifest so that distribution does not reveal private information
+Some use cases require more complex handling of software updates, such as:
 
-These mechanisms are not part of the core Manifest specification, but they are needed for more advanced use cases, such as the architecture described in {{I-D.ietf-teep-architecture}}.
+* A device may contain a processor in its radio in addition to the primary processor. These two processors will typically have separate Software, which may be developed Authors. Dependencies allow the Manifest for the primary processor to have a dependency on the Manifest for the radio module.
+* A network operator may wish to provide local caching of Update Payloads. The network operator overrides the URI of a Payload by providing a dependent Manifest that references the original Manifest, but replaces its URI.
+* A device operator provides a device with some additional configuration. The device operator wants to test their configuration with each new Software version before releasing it. The configuration is delivered as a binary in the same way as a Software Image. The device operator references the Software Manifest from the Software author in their own Manifest which also defines the configuration.
 
-This specification extends the SUIT Manifest specification ({{I-D.ietf-suit-manifest}}).
+By using Dependencies, Components (such as Software, configuration, and other personalization data) can be delivered to devices. A Dependency is thereby just another SUIT_Envelope that describes additional Components.
 
 #  Conventions and Terminology
 
 {::boilerplate bcp14}
 
-Additionally, the following terminology is used throughout this document:
-
-* SUIT: Software Update for the Internet of Things, also the IETF working group for this standard.
-* Payload: A piece of information to be delivered. Typically Firmware/Software, configuration, or Resource data such as text or images.
-* Resource: A piece of information that is used to construct a Payload.
-* Manifest: A Manifest is a bundle of metadata about one or more Components for a device, where to
-find them, and the devices to which they apply.
-* Envelope: A container with the Manifest, an authentication wrapper with cryptographic information protecting the Manifest, authorization information, and severable elements (see Section 5.1 of {{I-D.ietf-suit-manifest}}).
-* Update: One or more Manifests that describe one or more Payloads.
-* Update Authority: The owner of a cryptographic key used to sign Updates, trusted by Recipients.
-* Recipient: The system that receives and processes a Manifest.
-* Manifest Processor: A component of the Recipient that consumes Manifests and executes the Commands in the Manifest.
-* Component: An updatable logical block of the Firmware, Software, configuration, or data of the Recipient.
-* Component Set: A group of interdependent Components that must be updated simultaneously.
-* Command: A Condition or a Directive.
-* Condition: A test for a property of the Recipient or its Components.
-* Directive: An action for the Recipient to perform.
-* Trusted Invocation: A process by which a system ensures that only trusted code is executed, for example secure boot or launching a Trusted Application.
-* A/B Images: Dividing a Recipient's storage into two or more bootable Images, at different offsets, such that the active Image can write to the inactive Image(s).
-* Record: The result of a Command and any metadata about it.
-* Report: A list of Records.
-* Procedure: The process of invoking one or more sequences of Commands.
-* Update Procedure: A Procedure that updates a Recipient by fetching Dependencies and Images, and installing them.
-* Invocation Procedure: A Procedure in which a Recipient verifies Dependencies and Images, loading Images, and invokes one or more Image.
-* Software: Instructions and data that allow a Recipient to perform a useful function.
-* Firmware: Software that is typically changed infrequently, stored in nonvolatile memory, and small enough to apply to {{RFC7228}} Class 0-2 devices.
-* Image: Information that a Recipient uses to perform its function, typically Firmware/Software, configuration, or Resource data such as text or images. Also, a Payload, once installed is an Image.
-* Slot: One of several possible storage locations for a given Component, typically used in A/B Image systems
-* Abort: An event in which the Manifest Processor immediately halts execution of the current Procedure. It creates a Record of an error Condition.
-* Trust Anchor: A Trust Anchor, as defined in {{RFC6024}}, represents an
-      authoritative entity via a public key and associated data.  The
-      public key is used to verify digital signatures, and the
-      associated data is used to constrain the types of information for
-      which the Trust Anchor is authoritative.
+This document uses terminology defined in {{RFC9397}} and in {{RFC9019}}.
 
 #  Changes to SUIT Workflow Model
 
-The use of the features presented for use with multiple trust domains requires some augmentation of the workflow presented in the SUIT Manifest specification ({{I-D.ietf-suit-manifest}}):
+The use of the features presented in this document requires augmentation of the workflow presented in the SUIT Manifest specification ({{I-D.ietf-suit-manifest}}):
 
-One additional assumption is added for the Update Procedure: 
+One additional assumption is added for the Update Procedure:
 
 * All Dependency Manifests must be present before any Payload is fetched.
 
@@ -126,103 +87,50 @@ One additional assumption is added to the Invocation Procedure:
 
 * All Dependencies must be validated prior to loading.
 
-Steps 1 and 4 are added to the expected installation workflow of a Recipient:
+Step 3 has been added to the expected installation workflow of a Recipient:
 
-1. Verify Delegation Chains.
-2. Verify the signature of the Manifest.
-3. Verify the applicability of the Manifest.
-4. Resolve Dependencies.
-5. Fetch Payload(s).
-6. Install Payload(s).
+1. Verify the signature of the Manifest.
+2. Verify the applicability of the Manifest.
+3. Resolve Dependencies.
+4. Fetch Payload(s).
+5. Install Payload(s).
 
 In addition, when multiple Manifests are used for an Update, each Manifest's steps occur in a lockstep fashion; all Manifests have Dependency resolution performed before any Manifest performs a Payload fetch, etc.
 
-#  Changes to Manifest Metadata Structure {#metadata-structure-overview}
+#  Changes to Manifest Structure {#structure-change}
 
 To accommodate the additional metadata needed to enable these features, the Envelope and Manifest have several new elements added.
 
-The Envelope gains two more elements: Delegation Chains and Integrated Dependencies. The Common metadata section in the Manifest also gains a list of Dependencies.
-
-The new metadata structure is shown below.
+The Envelope is enhanced with the Integrated Dependencies structure, as highlighted in {{manifest-fig}}. The Common Structure in the Manifest also gains a list of Dependencies.
 
 ~~~
-+-------------------------+
-| Envelope                |
-+-------------------------+
-| Delegation Chains       |
-| Authentication Block    |
-| Manifest           --------------> +------------------------------+
-| Severable Elements      |          | Manifest                     |
-| Human-Readable Text     |          +------------------------------+
-| CoSWID                  |          | Structure Version            |
-| Integrated Dependencies |          | Sequence Number              |
-| Integrated Payloads     |          | Reference to Full Manifest   |
-+-------------------------+    +------ Common Structure             |
-                               | +---- Command Sequences            |
-+-------------------------+    | |   | Digests of Envelope Elements |
-| Common Structure        | <--+ |   +------------------------------+
-+-------------------------+      |
-| Dependency Indices      |      +-> +-----------------------+
-| Component IDs           |          | Command Sequence      |
-| Common Command Sequence ---------> +-----------------------+
-+-------------------------+          | List of ( pairs of (  |
-                                     |   * command code      |
-                                     |   * argument /        |
-                                     |      reporting policy |
-                                     | ))                    |
-                                     +-----------------------+
+   +-------------------------+
+   | Envelope                |
+   +-------------------------+
+   | Authentication Block    |
+   | Manifest           --------------> +------------------------------+
+   | Severable Elements      |          | Manifest                     |
+   | Integrated Payloads     |          +------------------------------+
+   |*Integrated Dependencies*|          | Structure Version            |
+   +-------------------------+          | Sequence Number              |
+                                        | Reference to Full Manifest   |
+                                  +------ Common Structure             |
+                                  | +---- Command Sequences            |
+   +-------------------------+    | |   | Digests of Envelope Elements |
+   | Common Structure        | <--+ |   +------------------------------+
+   +-------------------------+      |
+   |*Dependency Indices*     |      |
+   | Components IDs          |      +-> +-----------------------+
+   | Common Command Sequence ---------> | Command Sequence      |
+   +-------------------------+          +-----------------------+
+                                        | List of ( pairs of (  |
+                                        |   * command code      |
+                                        |   * argument /        |
+                                        |      reporting policy |
+                                        | ))                    |
+                                        +-----------------------+
 ~~~
-
-#  Delegation Chains {#ovr-delegation}
-
-Delegation Chains allow a Recipient to establish a chain of trust from a Trust Anchor to the signer of a Manifest by validating delegation claims. Each delegation claim is a {{RFC8392}} CBOR Web Token (CWT). The first claim in each list is signed by a Trust Anchor. Each subsequent claim in a list is signed by the public key claimed in the preceding list element. The last element in each list claims a public key that can be used to verify a signature in the Authentication Block (See Section 5.2 of {{I-D.ietf-suit-manifest}}).
-
-See {{delegation-info}} for more detail.
-
-##  Delegation Chains {#delegation-info}
-
-The suit-delegation element MAY carry one or more CBOR Web Tokens (CWTs) {{RFC8392}}, with {{RFC8747}} cnf claims. They can be used to perform enhanced authorization decisions. The CWTs are arranged into a list of lists. Each list starts with a CWT authorized by a Trust Anchor, and finishes with a key used to authenticate the Manifest (see Section 8.3 of {{I-D.ietf-suit-manifest}}). This allows an Update Authority to delegate from a long term Trust Anchor, down through intermediaries, to a delegate without any out-of-band provisioning of Trust Anchors or intermediary keys.
-
-A Recipient MAY choose to cache intermediaries and/or delegates. If an intermediary knows that a targeted Recipient has cached some intermediaries or delegates, it MAY choose to strip any cached intermediaries or delegates from the Delegation Chains in order to reduce bandwidth and energy.
-
-
-#  Dependencies 
-
-A Dependency is another SUIT_Envelope that describes additional Components. 
-
-Dependency Manifests enable several additional use cases. In particular, they enable two or more entities who are trusted for different privileges to coordinate. This can be used in many scenarios. For example:
-
-* A device may contain a processor in its radio in addition to the primary processor. These two processors may have separate Software with separate signing authorities. Dependencies allow the Software for the primary processor to reference a Manifest signed by a different authority.
-* A network operator may wish to provide local caching of Update Payloads. The network operator overrides the URI of a Payload by providing a dependent Manifest that references the original Manifest, but replaces its URI.
-* A device operator provides a device with some additional configuration. The device operator wants to test their configuration with each new Software version before releasing it. The configuration is delivered as a binary in the same way as a Software Image. The device operator references the Software Manifest from the Software author in their own Manifest which also defines the configuration.
-
-By using Dependencies, Components such as Software, configuration, and other Resource data authenticated by different Trust Anchors can be delivered to devices.
-
-##  Changes to Required Checks {#required-checks}
-
-This section augments the definitions in Required Checks (Section 6.2) of {{I-D.ietf-suit-manifest}}.
-
-More checks are required when handling Dependencies. By default, any signature of a Dependency MUST be verified. However, there are some exceptions to this rule: where a device supports only one level of access (no ACLs defining which authorities have access to different Components/Commands/Parameters), it MAY choose to skip signature verification of Dependencies, since they are verified by digest. Where a device differentiates between trust levels, such as with an ACL, it MAY choose to defer the verification of signatures of Dependencies until the list of affected Components is known so that it can skip redundant signature verifications. For example, if a dependent's signer has access rights to all Components specified in a Dependency, then that Dependency does not require a signature verification. Similarly, if the signer of the dependent has full rights to the device, according to the ACL, then no signature verification is necessary on the Dependency.
-
-Components that should be treated as Dependency Manifests are identified in the suit-common metadata. See {{structure-change}} for details.
-
-If the Manifest contains more than one Component and/or Dependency, each Command sequence MUST begin with a Set Component Index Command.
-
-If a Dependency is specified, then the Manifest processor MUST perform the following checks:
-
-1. The dependent MUST populate all Command sequences for the current Procedure (Update or Invoke).
-2. At the end of each section in the dependent: The corresponding section in each Dependency has been executed.
-
-If the interpreter does not support Dependencies and a Manifest specifies a Dependency, then the interpreter MUST Abort.
-
-If a Recipient supports groups of interdependent Components (a Component Set), then it SHOULD verify that all Components in the Component Set are specified by a single Manifest and all its Dependencies that together:
-
-1. have sufficient permissions imparted by their signatures
-2. specify a digest and a Payload for every Component in the Component Set.
-
-The single dependent Manifest is sometimes called a Root Manifest.
-
-##  Changes to Manifest Structure {#structure-change}
+{: #manifest-fig title="SUIT Manifest Structure: Enhancements with Dependencies"}
 
 This section augments the Manifest Structure (Section 8.4) in {{I-D.ietf-suit-manifest}}. 
 
@@ -237,7 +145,7 @@ $$SUIT_Manifest_Extensions //=
     (suit-manifest-component-id => SUIT_Component_Identifier)
 ~~~
 
-### SUIT_Dependencies Manifest Element {#SUIT_Dependencies}
+## SUIT_Dependencies Manifest Element {#SUIT_Dependencies}
 
 The suit-common section, as described in {{I-D.ietf-suit-manifest}}, Section 8.4.5 is extended with a map of Component indices that indicate a Dependency Manifest. The keys of the map are the Component indices and the values of the map are any extra metadata needed to describe those Dependency Manifests.
 
@@ -266,9 +174,33 @@ The suit-dependency-prefix element contains a SUIT_Component_Identifier (see Sec
 
 A Dependency prefix can be used with a Component identifier. This allows complex systems to understand where Dependencies need to be applied. The Dependency prefix can be used in one of two ways. The first simply prepends the prefix to all Component Identifiers in the Dependency.
 
-A Dependency prefix can also be used to indicate when a Dependency Manifest needs to be processed by a secondary Manifest processor, as described in {{hierarchical-interpreters}}.
+A Dependency prefix can also be used to indicate when a Dependency Manifest needs to be processed by a secondary Manifest processor, as described in {{processing-dependencies}}.
 
-##  Changes to Abstract Machine Description
+#  Changes to Required Checks {#required-checks}
+
+This section augments the definitions in Required Checks (Section 6.2) of {{I-D.ietf-suit-manifest}}.
+
+More checks are required when handling Dependencies. By default, any signature of a Dependency MUST be verified. However, there are some exceptions to this rule: where a device supports only one level of access (no ACLs defining which authorities have access to different Components/Commands/Parameters), it MAY choose to skip signature verification of Dependencies, since they are verified by digest. Where a device differentiates between trust levels, such as with an ACL, it MAY choose to defer the verification of signatures of Dependencies until the list of affected Components is known so that it can skip redundant signature verifications. For example, if a dependent's signer has access rights to all Components specified in a Dependency, then that Dependency does not require a signature verification. Similarly, if the signer of the dependent has full rights to the device, according to the ACL, then no signature verification is necessary on the Dependency.
+
+Components that should be treated as Dependency Manifests are identified in the suit-common metadata. See {{structure-change}} for details.
+
+If the Manifest contains more than one Component and/or Dependency, each Command sequence MUST begin with a Set Component Index Command.
+
+If a Dependency is specified, then the Manifest processor MUST perform the following checks:
+
+1. The dependent MUST populate all Command sequences for the current Procedure (Update or Invoke).
+2. At the end of each section in the dependent: The corresponding section in each Dependency has been executed.
+
+If the interpreter does not support Dependencies and a Manifest specifies a Dependency, then the interpreter MUST Abort.
+
+If a Recipient supports groups of interdependent Components (a Component Set), then it SHOULD verify that all Components in the Component Set are specified by a single Manifest and all its Dependencies that together:
+
+1. have sufficient permissions imparted by their signatures
+2. specify a digest and a Payload for every Component in the Component Set.
+
+The single dependent Manifest is sometimes called a Root Manifest.
+
+#  Changes to Abstract Machine Description
 
 This section augments the Abstract Machine Description (Section 6.4) in {{I-D.ietf-suit-manifest}}.
 With the addition of Dependencies, some changes are necessary to the abstract machine, outside the typical scope of added Commands. These changes alter the behaviour of an existing Command and way that the parser processes Manifests:
@@ -282,7 +214,7 @@ With the addition of Dependencies, some changes are necessary to the abstract ma
 * Dependency Manifests are also Components. All Commands may target Dependency Manifests as well as Components, with one exception: process Dependency. Commands defined outside of this draft and {{I-D.ietf-suit-manifest}} MAY have additional restrictions.
 * Dependencies are processed in lockstep with the Root Manifest. This means that every Dependency's current Command sequence must be executed before a dependent's later Command sequence may be executed. For example, every Dependency's Dependency Resolution step MUST be executed before any dependent's Payload fetch step.
 
-##  Processing Dependencies {#processing-dependencies}
+#  Processing Dependencies {#processing-dependencies}
 
 As described in {{required-checks}}, each Manifest must invoke each of its Dependencies' sections from the corresponding section of the dependent. Any changes made to Parameters by the Dependency persist in the dependent.
 
@@ -299,23 +231,25 @@ If the specified Dependency does not contain the current section, Process Depend
 
 The interpreter also performs the checks described in {{required-checks}} to ensure that the dependent is processing the Dependency correctly.
 
-###  Multiple Manifest Processors {#hierarchical-interpreters}
+Computing devices have increasingly become more complex and may consist of different processors, each performing their own task. For example, an application processor may have an attached communications module that contains a processor. The communications module may be provisioned with Trust Anchors different from the Trust Anchors used on the application processor.
 
-When a system has multiple trust domains, each domain might require independent verification of authenticity or security policies. Trust domains might be divided by separation technology such as Arm TrustZone, Intel SGX, or another Trusted Execution Environment (TEE) technology. Trust domains might also be divided into separate processors and memory spaces, with a communication interface between them.
+When maintaining the lifecycle of software on those processors, a Manifest library might be required in each of those processors:
 
-For example, an application processor may have an attached communications module that contains a processor. The communications module might require metadata signed by a specific Trust Authority for regulatory approval. This may be a different Trust Authority than the application processor.
+- The first Manifest library parser is the normal Manifest processor as described for the Recipient in Section 6 of {{I-D.ietf-suit-manifest}}. 
 
-When there are two or more trust domains, a Manifest processor might be required in each. The first Manifest processor is the normal Manifest processor as described for the Recipient in Section 6 of {{I-D.ietf-suit-manifest}}. The second Manifest processor only executes sections when the first Manifest processor requests it. An API interface is provided from the second Manifest processor to the first. This allows the first Manifest processor to request a limited set of operations from the second. These operations are limited to: setting Parameters, inserting an Envelope, and invoking a Manifest Command Sequence. The second Manifest processor declares a prefix to the first, which tells the first Manifest processor when it should delegate to the second. These rules are enforced by underlying separation of privilege infrastructure, such as TEEs, or physical separation.
+- The second Manifest processor only executes sections when the first Manifest processor requests it.
+
+An API interface is provided from the second Manifest processor to the first. This allows the first Manifest processor to request a limited set of operations from the second. These operations may be limited to: setting Parameters, inserting an Envelope, and invoking a Manifest Command Sequence. The second Manifest processor declares a prefix to the first, which tells the first Manifest processor when it should delegate to the second. These rules are enforced by underlying hardware and firmware.
 
 When the first Manifest processor encounters a Dependency prefix, that informs the first Manifest processor that it should provide the second Manifest processor with the corresponding Dependency Envelope. This is done when the Dependency is fetched. The second Manifest processor immediately verifies any authentication information in the Dependency Envelope. When a Parameter is set for any Component that matches the prefix, this Parameter setting is passed to the second Manifest processor via an API. As the first Manifest processor works through the Procedure (set of Command sequences) it is executing, each time it sees a Process Dependency Command that is associated with the prefix declared by the second Manifest processor, it uses the API to ask the second Manifest processor to invoke that Dependency section instead.
 
 This mechanism ensures that the two or more Manifest processors do not need to trust each other, except in a very limited case. When Parameter setting across trust domains is used, it must be very carefully considered. Only Parameters that do not have an effect on security properties should be allowed. The Dependency Manifest MAY control which Parameters are allowed to be set by using the Override Parameters Directive. The second Manifest processor MAY also control which Parameters may be set by the first Manifest processor by means of an ACL that lists the allowed Parameters. For example, a URI may be set by a dependent without a substantial impact on the security properties of the Manifest.
 
-##  Dependency Resolution {#suit-dependency-resolution}
+#  Dependency Resolution {#suit-dependency-resolution}
 
 The Dependency Resolution Command Sequence is a container for the Commands needed to acquire and process the Dependencies of the current Manifest. All Dependency Manifests SHOULD be fetched before any Payload is fetched to ensure that all Manifests are available and authenticated before any of the (larger) Payloads are acquired.
 
-##  Added and Modified Commands
+#  Added and Modified Commands
 
 All Commands are modified in that they can also target Dependencies. However, Set Component Index has a larger modification.
 
@@ -327,7 +261,7 @@ All Commands are modified in that they can also target Dependencies. However, Se
 | Is Dependency | assert(current exists in Dependencies)
 | Unlink | unlink(current)
 
-### suit-directive-set-parameters {#suit-directive-set-parameters}
+## suit-directive-set-parameters {#suit-directive-set-parameters}
 
 Similar to suit-directive-override-parameters, suit-directive-set-parameters allows the Manifest to configure behavior of future Directives by changing Parameters that are read by those Directives. Set Parameters is for use when Dependencies are used because it allows a Manifest to modify the behavior of its Dependencies.
 
@@ -337,8 +271,7 @@ If a Parameter is already set, suit-directive-set-parameters will skip setting t
 
 suit-directive-set-parameters does not specify a reporting policy.
 
-
-### suit-directive-process-dependency {#suit-directive-process-dependency}
+## suit-directive-process-dependency {#suit-directive-process-dependency}
 
 Execute the Commands in the common section of the current Dependency, followed by the Commands in the equivalent section of the current Dependency. For example, if the current section is "fetch Payload," this will execute "common" in the current Dependency, then "fetch Payload" in the current Dependency. Once this is complete, the Command following suit-directive-process-dependency will be processed.
 
@@ -350,24 +283,23 @@ If the current Component is True, then this Directive applies to all Dependencie
 
 When SUIT_Process_Dependency completes, it forwards the last status code that occurred in the Dependency.
 
-### suit-condition-is-dependency {#suit-condition-is-dependency}
+## suit-condition-is-dependency {#suit-condition-is-dependency}
 
 Check whether the current Component index is present in the Dependency list. If the current Component is in the Dependency list, suit-condition-is-dependency succeeds. Otherwise, it fails. This can be used along with component-id = True to act on all Dependencies or on all non-Dependency Components. See {{creating-manifests}} for more details.
 
-### suit-condition-dependency-integrity {#suit-condition-dependency-integrity}
+## suit-condition-dependency-integrity {#suit-condition-dependency-integrity}
 
 Verify the integrity of a Dependency Manifest. When a Manifest Processor executes suit-condition-dependency-integrity, it performs the following operations:
 
-1. Evaluate any Delegation Chains
-2. Verify the signature of the Manifest hash
-3. Compare the Manifest hash to the provided hash
-4. Verify the Manifest against the Manifest hash
+1. Verify the signature of the Manifest hash
+2. Compare the Manifest hash to the provided hash
+3. Verify the Manifest against the Manifest hash
 
 If any of these steps fails, the Manifest Process MUST immediately Abort.
 
 The Manifest Processor MAY cache the results of these operations for later use from the context of the current Manifest. The Manifest Processor MUST NOT use cached results from any other Manifest context. If the Manifest Processor caches the results of these checks, it MUST eliminate this cache if any Fetch, or Copy operation targets the Dependency Manifest's Component ID. 
 
-### suit-directive-unlink {#suit-directive-unlink}
+## suit-directive-unlink {#suit-directive-unlink}
 
 suit-directive-unlink applies to Manifests. When the Components defined by a Manifest are no longer needed, the Manifest processor unlinks the Manifest to inform the Manifest processor that they are no longer needed. The unlink Command decrements an implementation-defined reference counter. This reference counter MUST persist across restarts. The reference counter MUST NOT be decremented by a given Manifest more than once, and the Manifest processor must enforce this. The Manifest processor MAY choose to ignore a Unlink Directive depending on device policy.
 
@@ -414,7 +346,7 @@ If any Dependency is declared, the dependent MUST populate all Command sequences
 
 NOTE: Any changes made to Parameters in a Dependency persist in the dependent.
 
-### Composite Manifests {#composite-manifests}
+## Composite Manifests {#composite-manifests}
 
 An implementer MAY choose to place a Dependency's Envelope in the Envelope of its dependent. The dependent Envelope key for the Dependency Envelope MUST be a text string. The URI for the Dependency MUST match the text string key of the dependent's Envelope key. It is RECOMMENDED to make the text string key a resolvable URI so that a Dependency Manifest that is removed from the Envelope can still be fetched.
 
@@ -494,7 +426,6 @@ IANA is requested to allocate the following numbers in the listed registries:
 
 Label | Name | Reference
 ---|---|---
-1  | Delegation | {{ovr-delegation}}
 15 | Dependency Resolution | {{suit-dependency-resolution}}
 24 | Uninstall | {{suit-uninstall}}
 
@@ -522,8 +453,8 @@ Label | Name | Reference
 
 #  Security Considerations
 
-This document is about a Manifest format protecting and describing how to retrieve, install, and invoke Images and as such it is part of a larger solution for delivering software updates to devices. A detailed security treatment can be found in the architecture {{RFC9019}} and in the information model {{RFC9124}} documents.
-
+This document is about a Manifest format protecting and describing how to retrieve, install, and invoke Images and, as such, it is part of a larger solution for delivering software updates to devices. A detailed security treatment of SUIT
+manifests can be found in the architecture {{RFC9019}} and in the information model {{RFC9124}} documents.
 
 --- back
 
@@ -559,15 +490,6 @@ bz/m4rVlnIXbwK07HypLbAmBMcCjbazR14vTgdzfsJwFLbM5kdtzOLSolg==
 ~~~
 
 Each example uses SHA256 as the digest function.
-
-## Example 0: Delegation Chain
-
-This example uses functionalities:
-
-* manifest component id
-* delegation chain
-
-{::include examples/example0_delegation.txt}
 
 ## Example 1: Process Dependency
 
